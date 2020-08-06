@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 from load_data import VinDataset
 from visualize import plot_positions, animate
-
+from tensorboardX import SummaryWriter
 
 class Trainer:
     def __init__(self, config, net):
@@ -16,7 +16,7 @@ class Trainer:
         self.params = net.parameters()
         self.initial_values = {}
         self.config = config
-
+        self.writer = SummaryWriter('runs/')
         train_dataset = VinDataset(self.config)
         self.dataloader = DataLoader(train_dataset,
                                      batch_size=self.config.batch_size,
@@ -91,7 +91,9 @@ class Trainer:
                 total_loss, pred_loss, recon_loss = \
                     self.compute_loss(present_labels, future_labels,
                                       state_recon, state_pred)
-
+                self.writer.add_scalar('train/total_loss', total_loss, i + epoch*len(self.dataloader))
+                self.writer.add_scalar('train/recon_loss', recon_loss, i + epoch*len(self.dataloader))
+                self.writer.add_scalar('train/pred_loss', pred_loss, i + epoch*len(self.dataloader))
                 total_loss.backward()
                 self.optimizer.step()
 

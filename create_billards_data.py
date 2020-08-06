@@ -180,7 +180,7 @@ if __name__ == "__main__":
     dat_y = empty((N, T, 3, 4), dtype=float)
     for i in range(N):
         dat[i], dat_y[i] = bounce_vec(res=res, n=3, T=T)
-        print('training example {} / {}'.format(i, N))
+        print('training example {} / {}'.format(i+1, N))
     data = dict()
     data['X'] = dat
     data['y'] = dat_y
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     dat_y = empty((N, T, 3, 4), dtype=float)
     for i in range(N):
         dat[i], dat_y[i] = bounce_vec(res=res, n=3, T=T)
-        print('test example {} / {}'.format(i, N))
+        print('test example {} / {}'.format(i+1, N))
     data = dict()
     data['X'] = dat
     data['y'] = dat_y

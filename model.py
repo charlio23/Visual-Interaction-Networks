@@ -5,7 +5,7 @@ import torch
 from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv, ChebConv
 from torch_geometric.data import Data
 
 
@@ -72,7 +72,15 @@ class Net(nn.Module):
         for i in range(3):
             self.Gcores.append(nn.ModuleList())
             self.Gcores[i].append(GCNConv(cl, 2*cl).double().cuda())
+            self.Gcores[i].append(GCNConv(2*cl, 2*cl).double().cuda())
             self.Gcores[i].append(GCNConv(2*cl, cl).double().cuda())
+            
+        self.Scores = nn.ModuleList()
+        for i in range(3):
+            self.Scores.append(nn.ModuleList())
+            self.Scores[i].append(ChebConv(cl, 2*cl, K=5).double().cuda())
+            self.Scores[i].append(ChebConv(2*cl, 2*cl, K=5).double().cuda())
+            self.Scores[i].append(ChebConv(2*cl, cl, K=5).double().cuda())
 
         
         
@@ -144,7 +152,15 @@ class Net(nn.Module):
     def GraphCore(self, s, core_idx):
 
         hid = F.relu(self.Gcores[core_idx][0](s, self.edge_index))
-        out = self.Gcores[core_idx][1](hid, self.edge_index)
+        hid = F.relu(self.Gcores[core_idx][1](hid, self.edge_index))
+        out = self.Gcores[core_idx][2](hid, self.edge_index)
+        return out
+    
+    def SpectralCore(self, s, core_idx):
+
+        hid = F.relu(self.Scores[core_idx][0](s, self.edge_index))
+        hid = F.relu(self.Scores[core_idx][1](hid, self.edge_index))
+        out = self.Scores[core_idx][2](hid, self.edge_index)
         return out
 
     def frames_to_states(self, frames):
@@ -223,9 +239,9 @@ class Net(nn.Module):
         rollouts = []
         for i in range(num_rollout):
             # use cores to predict next state using delta_t = 1, 2, 4
-            c1 = self.GraphCore(s4, 0)
-            c2 = self.GraphCore(s3, 1)
-            c4 = self.GraphCore(s1, 2)
+            c1 = self.SpectralCore(s4, 0)
+            c2 = self.SpectralCore(s3, 1)
+            c4 = self.SpectralCore(s1, 2)
             all_c = torch.cat([c1, c2, c4], 2)
             aggregator1 = F.relu(self.aggregator1(all_c))
             state_prediction = self.aggregator2(aggregator1)

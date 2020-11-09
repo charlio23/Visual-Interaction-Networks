@@ -4,7 +4,6 @@ import visdom
 import numpy as np
 import imageio
 
-vis = visdom.Visdom()
 
 
 def plot_positions(xy, img_folder, prefix, save=True, size=10):
@@ -26,7 +25,6 @@ def plot_positions(xy, img_folder, prefix, save=True, size=10):
 
     if save:
         fig.savefig(img_folder+prefix+".pdf", dpi=mydpi, transparent=True)
-        vis.matplot(fig)
 
     fig.canvas.draw()
     image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
@@ -35,9 +33,14 @@ def plot_positions(xy, img_folder, prefix, save=True, size=10):
     return image
 
 
-def animate(states, img_folder, prefix):
+def animate(states, img_folder, prefix, save=True):
     images = []
     for i in range(len(states)):
         images.append(plot_positions(states[i:i + 1], img_folder,
                                      prefix, save=False, size=270))
-    imageio.mimsave(img_folder+prefix+'.gif', images, fps=24)
+    if save:
+        imageio.mimsave(img_folder+prefix+'.gif', images, fps=24)
+    vid = np.array(images).transpose((0,3,1,2))[np.newaxis, ...]
+
+    return vid
+    

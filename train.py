@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 from load_data import VinDataset
 from visualize import plot_positions, animate
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 class Trainer:
     def __init__(self, config, net):
@@ -31,12 +31,14 @@ class Trainer:
                                           shuffle=True,
                                           num_workers=4,
                                           drop_last=True)
-
+        print("Datasets loaded.")
         self.optimizer = optim.Adam(self.net.parameters(), lr=0.0005)
         if config.load:
             self.load()
 
     def save(self):
+        if not os.path.exists(self.config.checkpoint_dir):
+            os.makedirs(self.config.checkpoint_dir)
         torch.save(self.net.state_dict(), os.path.join(
             self.config.checkpoint_dir, "checkpoint"))
         print('Parameters saved')
@@ -63,11 +65,11 @@ class Trainer:
         return total_loss, pred_loss, recon_loss
 
     def train(self):
+        print("Training started.")
         step_counter = 0
         num_rollout = self.config.num_rollout
         for epoch in range(100):
-            print("testing................")
-            self.test()
+
             for i, data in enumerate(self.dataloader, 0):
                 step_counter += 1
                 images = data['image']
@@ -91,9 +93,7 @@ class Trainer:
                 total_loss, pred_loss, recon_loss = \
                     self.compute_loss(present_labels, future_labels,
                                       state_recon, state_pred)
-                self.writer.add_scalar('train/total_loss', total_loss, i + epoch*len(self.dataloader))
-                self.writer.add_scalar('train/recon_loss', recon_loss, i + epoch*len(self.dataloader))
-                self.writer.add_scalar('train/pred_loss', pred_loss, i + epoch*len(self.dataloader))
+
                 total_loss.backward()
                 self.optimizer.step()
 
@@ -103,21 +103,27 @@ class Trainer:
                                                            total_loss.item(),
                                                            recon_loss.item(),
                                                            pred_loss.item()))
+                    self.writer.add_scalar('train/total_loss', total_loss, i + epoch*len(self.dataloader))
+                    self.writer.add_scalar('train/recon_loss', recon_loss, i + epoch*len(self.dataloader))
+                    self.writer.add_scalar('train/pred_loss', pred_loss, i + epoch*len(self.dataloader))
                 # Draw example
-                if step_counter % 200 == 0:
+                if step_counter % 500 == 0:
                     real = torch.cat([present_labels[0], future_labels[0]]).cpu()
                     simu = torch.cat([state_recon[0], state_pred[0]]).detach().cpu()
-                    plot_positions(real, self.config.img_folder, 'real')
-                    plot_positions(simu, self.config.img_folder, 'rollout')
+                    img_real = plot_positions(real, self.config.img_folder, 'real').transpose((2, 0, 1))
+                    img_simu = plot_positions(simu, self.config.img_folder, 'rollout').transpose((2, 0, 1))
+                    self.writer.add_image('data/input', img_real, i + epoch*len(self.dataloader))
+                    self.writer.add_image('data/predict', img_simu, i + epoch*len(self.dataloader))
                 # Save parameters
                 if (step_counter + 1) % 1000 == 0:
                     self.save()
-
+            print("testing................")
+            self.test(epoch)
             print("epoch ", epoch, " Finished")
         print('Finished Training')
 
-    def test(self):
-        total_loss = 0.0
+    def test(self, epoch):
+        sum_total_loss = 0.0
         for i, data in enumerate(self.test_dataloader, 0):
             images, future_labels, present_labels = \
                 data['image'], data['future_labels'], data['present_labels']
@@ -135,16 +141,18 @@ class Trainer:
             total_loss, pred_loss, recon_loss = \
                 self.compute_loss(present_labels, future_labels,
                                   recon, pred)
+            sum_total_loss += total_loss.detach().cpu()/(len(self.test_dataloader))
 
-        print('total test loss {:5f}'.format(total_loss.item()))
-
+        print('total test loss {:5f}'.format(sum_total_loss.item()))
+        if (epoch+1)%10 == 0:
+            self.writer.add_text('data/test_error', str(sum_total_loss), epoch)
         # Create one long rollout and save it as an animated GIF
         total_images = self.test_dataset.total_img
         total_labels = self.test_dataset.total_data
         step = self.config.frame_step
         visible = self.config.num_visible
         batch_size = self.config.batch_size
-
+        
         long_rollout_length = self.config.num_frames // step - visible
 
         if self.config.visual:
@@ -161,8 +169,11 @@ class Trainer:
         simu_recon = recon[0].detach().cpu().numpy()
         simu = np.concatenate((simu_recon, simu_rollout), axis=0)
 
+
         # Saving
         print("Make GIFs")
-        animate(total_labels[0, 2:], self.config.img_folder, 'real')
-        animate(simu, self.config.img_folder, 'rollout')
+        vid_labels = torch.from_numpy(animate(total_labels[0, 2:], self.config.img_folder, 'real'))
+        vid_predict = torch.from_numpy(animate(simu, self.config.img_folder, 'rollout'))
+        self.writer.add_video('long_roll/input', vid_labels, epoch+1)
+        self.writer.add_video('long_roll/predict', vid_predict, epoch+1)
         print("Done")

@@ -1,8 +1,12 @@
+from itertools import combinations
+
 import numpy as np
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
+from torch_geometric.nn import GCNConv
+from torch_geometric.data import Data
 
 
 class Net(nn.Module):
@@ -57,7 +61,21 @@ class Net(nn.Module):
             self.out.append(nn.ModuleList())
             self.out[i].append(nn.Linear(cl + cl, cl).double().cuda())
             self.out[i].append(nn.Linear(cl, cl).double().cuda())
+        
+        # Interaction Core GNNConv
+        pac = lambda x, y: [x, y]
+        revpac = lambda x, y: [y, x]
+        indices = [func(x, y) for x, y in combinations(range(3),2) for func in (pac, revpac)]
+        
+        self.edge_index = torch.tensor(indices).t().contiguous().cuda()
+        self.Gcores = nn.ModuleList()
+        for i in range(3):
+            self.Gcores.append(nn.ModuleList())
+            self.Gcores[i].append(GCNConv(cl, 2*cl).double().cuda())
+            self.Gcores[i].append(GCNConv(2*cl, cl).double().cuda())
 
+        
+        
         # Aggregator MLP for aggregating core predictions
         self.aggregator1 = nn.Linear(cl * 3, cl)
         self.aggregator2 = nn.Linear(cl, cl)
@@ -122,6 +140,12 @@ class Net(nn.Module):
         out1 = F.relu(self.out[core_idx][0](aff_s))
         out2 = self.out[core_idx][1](out1) + out1
         return out2
+    
+    def GraphCore(self, s, core_idx):
+
+        hid = F.relu(self.Gcores[core_idx][0](s, self.edge_index))
+        out = self.Gcores[core_idx][1](hid, self.edge_index)
+        return out
 
     def frames_to_states(self, frames):
         """
@@ -199,9 +223,9 @@ class Net(nn.Module):
         rollouts = []
         for i in range(num_rollout):
             # use cores to predict next state using delta_t = 1, 2, 4
-            c1 = self.core(s4, 0)
-            c2 = self.core(s3, 1)
-            c4 = self.core(s1, 2)
+            c1 = self.GraphCore(s4, 0)
+            c2 = self.GraphCore(s3, 1)
+            c4 = self.GraphCore(s1, 2)
             all_c = torch.cat([c1, c2, c4], 2)
             aggregator1 = F.relu(self.aggregator1(all_c))
             state_prediction = self.aggregator2(aggregator1)

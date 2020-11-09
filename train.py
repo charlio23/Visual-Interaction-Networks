@@ -16,7 +16,7 @@ class Trainer:
         self.params = net.parameters()
         self.initial_values = {}
         self.config = config
-        self.writer = SummaryWriter('runs/')
+        self.writer = SummaryWriter('runs/' + config.exp_name)
         train_dataset = VinDataset(self.config)
         self.dataloader = DataLoader(train_dataset,
                                      batch_size=self.config.batch_size,
@@ -105,8 +105,8 @@ class Trainer:
                                                            pred_loss.item()))
                 # Draw example
                 if step_counter % 200 == 0:
-                    real = torch.cat([present_labels[0], future_labels[0]])
-                    simu = torch.cat([state_recon[0], state_pred[0]]).detach()
+                    real = torch.cat([present_labels[0], future_labels[0]]).cpu()
+                    simu = torch.cat([state_recon[0], state_pred[0]]).detach().cpu()
                     plot_positions(real, self.config.img_folder, 'real')
                     plot_positions(simu, self.config.img_folder, 'rollout')
                 # Save parameters

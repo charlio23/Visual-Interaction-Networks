@@ -1,11 +1,12 @@
 class VinConfig:
-
+    #Name
+    exp_name = "baseline-vin"
     # Directories
-    img_folder = "./img/"  # image folder
+    img_folder = "./" + exp_name + "/img/"  # image folder
     traindata = 'billards_balls_training_data.mat'
     testdata = 'billards_balls_testing_data.mat'
-    checkpoint_dir = "./checkpoint/"
-    log_dir = "./log"
+    checkpoint_dir = "./" + exp_name + "/checkpoint/"
+    log_dir = "./" + exp_name + "/log"
 
     # Model/training config
     visual = True  # If False, use states as input instead of images
